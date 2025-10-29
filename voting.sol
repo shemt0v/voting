@@ -7,6 +7,7 @@ contract Voting {
         bytes data;
         uint yesCount;
         uint noCount;
+        bool executed;
     }
     Proposal[] public proposals;
 
@@ -26,7 +27,7 @@ contract Voting {
 
     function newProposal(address _target, bytes memory _data) external {
         require(Allowed[msg.sender], "not allowed");
-        proposals.push(Proposal({target: _target, data: _data, yesCount: 0, noCount: 0}));
+        proposals.push(Proposal({target: _target, data: _data, yesCount: 0, noCount: 0, executed:false }));
         emit ProposalCreated(proposals.length - 1);
     }
 
@@ -53,9 +54,10 @@ contract Voting {
             if(_vote) proposals[_id].yesCount++;
             else proposals[_id].noCount++;
         }
-        if(proposals[_id].yesCount == 10) {
+        if(proposals[_id].yesCount >= 10 && !proposals[_id].executed) {
             (bool success, ) = proposals[_id].target.call(proposals[_id].data);
             require(success);
+            proposals[_id].executed = true;
         }  
         emit VoteCast(_id, msg.sender);
     }
