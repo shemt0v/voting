@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 contract Voting {
     struct Proposal {
@@ -9,56 +9,53 @@ contract Voting {
         uint noCount;
         bool executed;
     }
+    
     Proposal[] public proposals;
+    mapping(address => mapping(uint => bool)) public hasVoted;
+    mapping(address => mapping(uint => bool)) public choiceVote;
+    mapping(address => bool) public allowed;
 
-    mapping(address => bool) Allowed;
+    event ProposalCreated(uint proposalId);
+    event VoteCast(uint proposalId, address voter);
+
     constructor(address[] memory _voters) {
-        Allowed[msg.sender] = true;
-        for(uint i = 0; i < _voters.length; i++) {
-            Allowed[_voters[i]] = true;
+        allowed[msg.sender] = true;
+        for (uint i = 0; i < _voters.length; i++) {
+            allowed[_voters[i]] = true;
         }
     }
 
-    mapping(uint => mapping(address => bool)) hasVoted;
-    mapping(uint => mapping(address => bool)) voteChoice;
-
-    event ProposalCreated(uint id);
-    event VoteCast(uint id, address addr);
-
-    function newProposal(address _target, bytes memory _data) external {
-        require(Allowed[msg.sender], "not allowed");
-        proposals.push(Proposal({target: _target, data: _data, yesCount: 0, noCount: 0, executed:false }));
+    function newProposal(address _to, bytes calldata _data) external {
+        require(allowed[msg.sender], "not allowed");
+        proposals.push(Proposal({target: _to, data: _data, yesCount: 0, noCount: 0, executed: false}));
         emit ProposalCreated(proposals.length - 1);
     }
 
     function castVote(uint _id, bool _vote) external {
-        require(Allowed[msg.sender], "not allowed");  
-        if(hasVoted[_id][msg.sender]) {
-            bool oldVote = voteChoice[_id][msg.sender];
-            if(oldVote != _vote) {
-                if(oldVote) {
-                    proposals[_id].yesCount--;
-                    proposals[_id].noCount++;
-                }
-                else {
-                    proposals[_id].yesCount++;
-                    proposals[_id].noCount--;
-                }
-                voteChoice[_id][msg.sender] = _vote;
-            }
-        }
-        else {
-            hasVoted[_id][msg.sender] = true; 
-            voteChoice[_id][msg.sender] = _vote;
-            
-            if(_vote) proposals[_id].yesCount++;
+        require(allowed[msg.sender], "not allowed");
+        if (!hasVoted[msg.sender][_id]) { 
+            hasVoted[msg.sender][_id] = true;
+            choiceVote[msg.sender][_id] = _vote;
+            if (_vote) proposals[_id].yesCount++;
             else proposals[_id].noCount++;
         }
-        if(proposals[_id].yesCount >= 10 && !proposals[_id].executed) {
+        else {
+            bool oldVote = choiceVote[msg.sender][_id];
+            if (oldVote != _vote) {
+                choiceVote[msg.sender][_id] = _vote;
+
+                if (oldVote) proposals[_id].yesCount--;
+                else proposals[_id].noCount--;
+
+                if (_vote) proposals[_id].yesCount++;
+                else proposals[_id].noCount++;
+            }    
+        }
+        if (proposals[_id].yesCount >= 10 && !proposals[_id].executed) {
             (bool success, ) = proposals[_id].target.call(proposals[_id].data);
             require(success);
             proposals[_id].executed = true;
-        }  
+        } 
         emit VoteCast(_id, msg.sender);
     }
 }
